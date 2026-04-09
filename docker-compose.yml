@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chimera-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-chimera}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: chimera-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio
+    container_name: chimera-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-admin}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-password123}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  # Helper to create bucket initially
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc config host add myminio http://minio:9000 $${AWS_ACCESS_KEY_ID:-admin} $${AWS_SECRET_ACCESS_KEY:-password123};
+      /usr/bin/mc mb myminio/$${S3_BUCKET_NAME:-chimera-uploads};
+      /usr/bin/mc anonymous set public myminio/$${S3_BUCKET_NAME:-chimera-uploads};
+      exit 0;
+      "
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
